@@ -12,7 +12,7 @@ class FileExplorerWidget(npyscreen.BoxTitle):
             self.parent.load_objects(self.get_values()[self.value])
 
             # Reset
-            self.value = None
+            self.set_value(None)
             
             # Beep
             curses.beep()

@@ -1,4 +1,4 @@
-from s3_holmes import S3Holmes
+from s3holmes import S3Holmes
 import npyscreen
 
 if __name__ == "__main__":

@@ -5,9 +5,14 @@ import os
 import urllib
 import botocore
 import time
+import boto3
 
-from s3_holmes.src.widgets import FileExplorerWidget, AskAWSKeysWidget
-from s3_holmes.src.values import LOGO, HELP_CONFIG
+# Boto3 Extra
+from botocore.client import Config
+from botocore import UNSIGNED
+
+from s3holmes.src.widgets import FileExplorerWidget, AskAWSKeysWidget
+from s3holmes.src.values import LOGO, HELP_CONFIG
 
 
 class ConfigScreen(npyscreen.ActionForm):
@@ -52,6 +57,10 @@ class ConfigScreen(npyscreen.ActionForm):
 
         # Go to FileExplorer
         self.parentApp.switchForm("FileExplorer")
+
+    def on_cancel(self):
+        # Exit program
+        exit(0)
 
     def test(self,  *args, **keywords):
         self.set_editing(self.url)
@@ -112,15 +121,36 @@ class FileExplorerScreen(npyscreen.FormBaseNewExpanded):
         self.bucket = ""
         self.__files = []
 
-        # Get s3 instance
-        self.__s3 = self.parentApp.s3
+        # Get before screen instance
+        self.URLForm = self.parentApp.getForm("MAIN")
+        self.AWSKeys = self.parentApp.getForm("AWSKeys")
+
+        # Get profile option
+        self.profile = self.URLForm.profile.values
 
     def create(self):
         self.FileExplorer = self.add(FileExplorerWidget, name="/")
 
     def activate(self):
-        # Get before screen instance
-        self.URLForm = self.parentApp.getForm("MAIN")
+        # Get current option
+        profile_option = self.profile[self.URLForm.profile.value[0]]
+
+        # Check profile value
+        if profile_option == "Yes":
+            # Get aws credentials
+            aws_key = self.AWSKeys.key.value
+            aws_secret = self.AWSKeys.secret.value
+            aws_region = self.AWSKeys.region.value
+
+            # Client with credentials
+            self.__s3 = boto3.client(
+                's3', aws_access_key_id=aws_key,
+                aws_secret_access_key=aws_secret,
+                region_name=aws_region)
+        else:
+            # Client without credentials
+            self.__s3 = boto3.client(
+                's3', config=Config(signature_version=UNSIGNED))
 
         # Get Bucket URL or No
         if "." in self.URLForm.url.value:
@@ -157,7 +187,7 @@ class FileExplorerScreen(npyscreen.FormBaseNewExpanded):
             return
 
         # Set attribute
-        if prefix != "" and prefix != "Parent Directory":
+        if prefix != "" and prefix != "Parent Directory ←":
             self.prefix = prefix
 
         if prefix == "Parent Directory ←":
@@ -198,7 +228,19 @@ class FileExplorerScreen(npyscreen.FormBaseNewExpanded):
                 error_text = "Forbidden Operation."
 
             # Show error message
-            npyscreen.notify_confirm(error_text, 'Download File Error')
+            npyscreen.notify_confirm(error_text, 'List Error')
+
+            # Return to config screen
+            self.parentApp.switchForm("MAIN")
+
+            # Stop method
+            return
+        except botocore.exceptions.EndpointConnectionError as e:
+            # Init error message
+            error_text = "Could not connect to S3 Bucket."
+
+            # Show error message
+            npyscreen.notify_confirm(error_text, 'Bucket Error')
 
             # Return to config screen
             self.parentApp.switchForm("MAIN")
@@ -222,7 +264,7 @@ class FileExplorerScreen(npyscreen.FormBaseNewExpanded):
         tree = None
 
         # Set Values
-        if prefix == "":
+        if self.prefix == "":
             tree = [*folders, *self.__files]
         else:
             tree = ["Parent Directory ←", *folders, *self.__files]
